@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple
 
+from di.environment.wireless_device import WirelessDevice
+
+
 class GraphInterface(ABC):
     @abstractmethod
     def get_node_features(self) -> List[List[float]]:
@@ -11,7 +14,7 @@ class GraphInterface(ABC):
         pass
     
     @abstractmethod
-    def update_edge_rates(self, positions: Dict[int, Tuple[float, float]]):
+    def update_edge_rates(self, wd: WirelessDevice):
         pass
     
     @abstractmethod

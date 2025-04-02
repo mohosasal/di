@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple
 
-class MobilityModel(ABC):
+class WdModel(ABC):
     @abstractmethod
-    def move(self, positions: Dict[int, Tuple[float, float]]) -> Dict[int, Tuple[float, float]]:
+    def move(self):
         pass
