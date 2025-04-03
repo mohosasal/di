@@ -1,13 +1,13 @@
 import torch
 import dgl
 import numpy as np
-from .base_graph import GraphInterface
+from .base_graph import IGraphManager
 from typing import Dict, List, Tuple
 
-from ..environment.wireless_device import WirelessDevice
+from ..environment.mobility.base_wd import IWirelessDevice
 
 
-class GraphManager(GraphInterface):
+class GraphManager(IGraphManager):
     def __init__(self, config):
         self.config = config
         self.graph = self._build_graph()
@@ -51,7 +51,7 @@ class GraphManager(GraphInterface):
     def get_edge_features(self) -> List[float]:
         return self.graph.edata['feat'].tolist()
 
-    def update_edge_rates(self, wd: WirelessDevice):
+    def update_edge_rates(self, wd: IWirelessDevice):
         """
         Update edge rates based on WirelessDevice positions.
         Only updates edges where both nodes are wireless devices.

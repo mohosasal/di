@@ -2,8 +2,11 @@ from typing import Tuple, Optional
 import numpy as np
 import pandas as pd
 
+from di.environment.mobility.base_wd import IWirelessDevice
+from di.environment.task import Task
 
-class WirelessDevice:
+
+class WirelessDevice(IWirelessDevice):
     vehicles_df = None
     vehicles = []
     time = 1000.00
@@ -31,6 +34,7 @@ class WirelessDevice:
                 wd.y = float(row.y)
                 wd.speed = float(row.speed)
                 wd.angle = float(row.angle)
+                wd.cc = 0
 
                 WirelessDevice.vehicles.append(wd)
 
@@ -44,5 +48,12 @@ class WirelessDevice:
             vehicle.move()
         WirelessDevice.time +=1
 
-
+    def process_local_task(self, task: Task, queue_delay: float) -> float:
+        processing_time = task.k_i / self.cc
+        return processing_time + queue_delay
 #
+    @staticmethod
+    def get_vehicle_by_id(wd_id):
+        for vehicle in WirelessDevice.vehicles:
+            if vehicle.wd_id == wd_id:
+                return vehicle

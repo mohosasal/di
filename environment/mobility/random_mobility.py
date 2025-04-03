@@ -1,5 +1,5 @@
 import numpy as np
-from .base_mobility import MobilityModel
+from .base_wd import MobilityModel
 from typing import Dict, Tuple
 
 class RandomMobility(MobilityModel):
