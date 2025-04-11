@@ -1,8 +1,8 @@
 from typing import List, Dict
-from ...graph.base_graph import GraphInterface
+from di.graph.base_graph import IGraphManager
 
 class Critic:
-    def evaluate(self, graph_manager: GraphInterface, tasks: List['Task'], 
+    def evaluate(self, graph_manager: IGraphManager, tasks: List['Task'],
                  actions: List[List[int]], queues: Dict[int, List['Task']]) -> float:
         total_latency = 0.0
         node_features = graph_manager.get_node_features()

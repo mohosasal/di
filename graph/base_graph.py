@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple
 
-from di.environment.mobility.base_wd import IWirelessDevice
-from di.environment.wireless_device import WirelessDevice
+from di.environment.base_object import IWirelessDevice
 
 
 class IGraphManager(ABC):
@@ -15,7 +14,7 @@ class IGraphManager(ABC):
         pass
     
     @abstractmethod
-    def update_edge_rates(self, wd: IWirelessDevice):
+    def update_edge_rates(self):
         pass
     
     @abstractmethod

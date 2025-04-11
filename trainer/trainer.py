@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 from typing import List
-from ..models.actor.base_actor import GNNActor
-from ..models.critic.critic import Critic
-from ..exploration.base_exploration import ExplorationStrategy
-from ..environment.mec_environment import MECEnvironment
+from di.models.actor.base_actor import GNNActor
+from di.models.critic.critic import Critic
+from di.exploration.base_exploration import ExplorationStrategy
+from di.environment.mec_environment import MECEnvironment
 
 class Trainer:
     def __init__(self, actor: GNNActor, critic: Critic, exploration: ExplorationStrategy, 

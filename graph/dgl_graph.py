@@ -2,47 +2,69 @@ import torch
 import dgl
 import numpy as np
 from .base_graph import IGraphManager
-from typing import Dict, List, Tuple
-
-from ..environment.mobility.base_wd import IWirelessDevice
+from typing import List, Dict
+from di.environment.base_object import IWirelessDevice
 
 
 class GraphManager(IGraphManager):
-    def __init__(self, config):
+    threshold = 1
+    def __init__(self, config, wds: List[IWirelessDevice], aps: List[int], servers: List[int]):
+
         self.config = config
+        self.wds = {wd.ID: wd for wd in wds}
+        self.aps = {ap.ID: ap for ap in aps}
+        self.servers = {server.ID: server for server in servers}
+
+        # Create node mapping
+        self.node_map = {**{wd.ID: wd.ID for wd in wds},
+                         **{ap: ap for ap in aps},
+                         **{server: server for server in servers}}
+
+        # Create the graph dynamically
         self.graph = self._build_graph()
 
     def _build_graph(self) -> dgl.DGLGraph:
         g = dgl.DGLGraph()
-        num_wds = self.config.mec_params['num_wds']
-        num_aps = self.config.mec_params['num_aps']
-        num_servers = self.config.mec_params['num_servers']
-        total_nodes = num_wds + num_aps + num_servers
 
-        g.add_nodes(total_nodes)
+        # Add nodes using actual IDs
+        all_nodes = list(self.node_map.keys())
+        g.add_nodes(len(all_nodes))
 
-        # Create edges: WD->AP and AP->Server
-        edges = [(wd, ap) for wd in range(num_wds)
-                 for ap in range(num_wds, num_wds + num_aps)] + \
-                [(ap, server) for ap in range(num_wds, num_wds + num_aps)
-                 for server in range(num_wds + num_aps, total_nodes)]
+        # Define edges dynamically
+        edges = []
 
-        src, dst = zip(*edges)
-        g.add_edges(src, dst)
+        # WD → AP connections
+        for wd_id in self.wds.keys():
+            for ap in self.aps:
+                edges.append((wd_id, ap))
 
-        # Initialize node features
-        # [frequency, reserved, type] where type: 0=WD, 1=AP, 2=Server
+        # AP → Server connections
+        for ap in self.aps:
+            for server in self.servers:
+                edges.append((ap, server))
+
+        # **C2C: Direct WD → Server connections**
+        for wd_id, wd in self.wds.items():
+            if wd.C2C:  # If C2C is enabled, allow direct transmission
+                for server in self.servers:
+                    edges.append((wd_id, server))
+
+        # Add edges to the graph
+        if edges:
+            src, dst = zip(*edges)
+            g.add_edges(src, dst)
+
+        # Initialize node features: [frequency, reserved, type] (0=WD, 1=AP, 2=Server)
         g.ndata['feat'] = torch.tensor(
-            [[np.random.uniform(*self.config.mec_params['f_wd_range']), 0.0, 0]
-             for _ in range(num_wds)] +
-            [[self.config.mec_params['f_ap'], 0.0, 1]
-             for _ in range(num_aps)] +
-            [[self.config.mec_params['f_server'], 0.0, 2]
-             for _ in range(num_servers)],
-            dtype=torch.float32)
+            [[np.random.uniform(*self.config.mec_params['f_wd_range']), 0.0, 0] for _ in self.wds] +
+            [[self.config.mec_params['f_ap'], 0.0, 1] for _ in self.aps] +
+            [[self.config.mec_params['f_server'], 0.0, 2] for _ in self.servers],
+            dtype=torch.float32
+        )
 
         # Initialize edge features with zeros
         g.edata['feat'] = torch.zeros(g.num_edges(), dtype=torch.float32)
+
         return g
 
     def get_node_features(self) -> List[List[float]]:
@@ -52,35 +74,27 @@ class GraphManager(IGraphManager):
         return self.graph.edata['feat'].tolist()
 
     def update_edge_rates(self, wd: IWirelessDevice):
-        """
-        Update edge rates based on WirelessDevice positions.
-        Only updates edges where both nodes are wireless devices.
-        """
         for edge_id, (src, dst) in enumerate(zip(*self.graph.edges())):
-            # Find vehicles corresponding to source and destination nodes
-            src_vehicle = next((v for v in wd.vehicles if v.VehicleID == src), None)
-            dst_vehicle = next((v for v in wd.vehicles if v.VehicleID == dst), None)
+            src_vehicle = self.wds.get(src, None)
+            dst_vehicle = self.wds.get(dst, None)
 
-            # Only update if both nodes are valid wireless devices
             if src_vehicle and dst_vehicle:
-                # Calculate Euclidean distance between vehicles
                 dist = np.sqrt((src_vehicle.x - dst_vehicle.x) ** 2 +
                                (src_vehicle.y - dst_vehicle.y) ** 2)
+                dist = max(dist, 0.0001)  # Avoid division by zero
 
-                # Prevent division by zero
-                if dist == 0:
-                    dist = 0.0001  # Small epsilon value
-
-                # Calculate channel gain using distance-based path loss
+                # Path loss model
                 H = dist ** (-4)
-
-                # Get parameters from config
                 B = self.config.mec_params['bandwidth']
                 P = self.config.mec_params['transmit_power']
                 N = self.config.mec_params['noise']
 
-                # Update edge feature with Shannon capacity
-                self.graph.edata['feat'][edge_id] = B * np.log2(1 + P * H / N)
+                # Shannon capacity update
+                rate = B * np.log2(1 + P * H / N)
+                self.graph.edata['feat'][edge_id] = rate
+
+                if rate < GraphManager.threshold:
+                    self.graph.remove_edges(edge_id)
 
     def successors(self, node_id: int) -> List[int]:
         return self.graph.successors(node_id).tolist()
@@ -92,8 +106,9 @@ class GraphManager(IGraphManager):
         return self.graph.has_edges_between(src, dst).item()
 
     def add_edges(self, src: int, dst: int):
+        """ Add an edge dynamically """
         self.graph.add_edges(src, dst)
 
     def remove_edges(self, edge_id: int):
+        """ Remove an edge by its ID """
         self.graph.remove_edges(edge_id)
-

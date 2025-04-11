@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 import torch.nn as nn
 import dgl.nn as dglnn

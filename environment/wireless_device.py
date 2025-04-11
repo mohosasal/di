@@ -1,59 +1,71 @@
-from typing import Tuple, Optional
-import numpy as np
+# implementation.py
+from typing import Tuple, List
 import pandas as pd
-
-from di.environment.mobility.base_wd import IWirelessDevice
+from di.environment.base_object import IWirelessDevice
 from di.environment.task import Task
 
 
 class WirelessDevice(IWirelessDevice):
     vehicles_df = None
-    vehicles = []
+    vehicles: List["WirelessDevice"] = []
     time = 1000.00
 
-    def __init__(self):
-        # Remove these calls from __init__ as they should be called explicitly
-        pass
+    def __init__(self, id, x, y, s, a, cc):
+        self.id = id
+        self.x = x
+        self.y = y
+        self.s = s
+        self.a = a
+        self.cc = cc
 
     @staticmethod
     def load_data(file_path="./TAVF-Hamburg/simulation_results.txt"):
-        WirelessDevice.vehicles_df = pd.read_csv(file_path, sep="\t")
+        try:
+            WirelessDevice.vehicles_df = pd.read_csv(file_path, sep="\t")
+        except Exception as e:
+            print(f"Error loading data: {e}")
 
     @staticmethod
-    def populate():
-        if WirelessDevice.vehicles_df is None:
-            raise ValueError("Dataframe is not loaded. Call WirelessDevice.load_data() first.")
-
-        WirelessDevice.vehicles.clear()
-
-        for row in WirelessDevice.vehicles_df.itertuples(index=False):
-            if float(row.SimulationTime) == WirelessDevice.time:
-                wd = WirelessDevice()
-                wd.VehicleID = row.VehicleID
-                wd.x = float(row.x)
-                wd.y = float(row.y)
-                wd.speed = float(row.speed)
-                wd.angle = float(row.angle)
-                wd.cc = 0
-
-                WirelessDevice.vehicles.append(wd)
+    def move_all(time):
+        WirelessDevice.time += time
+        if not WirelessDevice.vehicles:
+            for row in WirelessDevice.vehicles_df.itertuples(index=False):
+                vehicle = WirelessDevice(
+                    id=row.VehicleID,
+                    x=float(row.x),
+                    y=float(row.y),
+                    s=float(row.speed),
+                    a=float(row.angle),
+                    cc=10
+                )
+                WirelessDevice.vehicles.append(vehicle)
+        else:
+            for vehicle in WirelessDevice.vehicles:
+                vehicle.move()
 
     def move(self):
-        self.x += self.speed * np.cos(np.radians(self.angle))
-        self.y += self.speed * np.sin(np.radians(self.angle))
+        row = WirelessDevice.vehicles_df[
+            (WirelessDevice.vehicles_df['VehicleID'] == self.id) &
+            (WirelessDevice.vehicles_df['SimulationTime'] == WirelessDevice.time)
+        ]
+        if not row.empty:
+            row = row.iloc[0]
+            self.x = float(row.x)
+            self.y = float(row.y)
+            self.s = float(row.speed)
+            self.a = float(row.angle)
 
     @staticmethod
-    def move_all():
+    def get_wd_by_id(id):
         for vehicle in WirelessDevice.vehicles:
-            vehicle.move()
-        WirelessDevice.time +=1
-
-    def process_local_task(self, task: Task, queue_delay: float) -> float:
-        processing_time = task.k_i / self.cc
-        return processing_time + queue_delay
-#
-    @staticmethod
-    def get_vehicle_by_id(wd_id):
-        for vehicle in WirelessDevice.vehicles:
-            if vehicle.wd_id == wd_id:
+            if vehicle.id == id:
                 return vehicle
+        return None
+
+
+
+    def get_position(self) -> Tuple[float, float]:
+        return self.x, self.y
+
+    def get_id(self) -> str:
+        return self.id
