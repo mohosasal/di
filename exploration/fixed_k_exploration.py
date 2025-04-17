@@ -4,10 +4,11 @@ import numpy as np
 from di.exploration.base_exploration import ExplorationStrategy
 from di.graph.base_graph import IGraphManager
 
+
 class FixedKExploration(ExplorationStrategy):
     def __init__(self, k: int):
         self.k = k
-    
+
     def explore(self, predicted_actions: 'torch.Tensor', graph_manager: IGraphManager,
                 max_hops: int) -> List[List[int]]:
         num_wds = len(predicted_actions)

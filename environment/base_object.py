@@ -5,6 +5,9 @@ from di.environment.task import Task
 
 class IWirelessDevice(Protocol):
 
+    def __init__(self):
+        self.feature = list()
+
     @staticmethod
     def load_data(file_path) -> None:
         pass
@@ -15,8 +18,6 @@ class IWirelessDevice(Protocol):
 
     def move(self) -> None:
         pass
-
-
 
     @staticmethod
     def get_wd_by_id(id) -> "IWirelessDevice":

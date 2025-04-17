@@ -5,7 +5,6 @@ class TaskStatus(Enum):
     TRANSMITTING = auto()
     PROCESSING = auto()
     COMPUTATION_COMPLETED = auto()
-    ACK_PENDING = auto()
     ACK_TRANSMITTING = auto()
     ACK_RECEIVED = auto()
     FULL_COMPLETED = auto()

@@ -1,7 +1,9 @@
 import networkx as nx
 import numpy as np
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 import matplotlib.pyplot as plt
+import torch
+from torch_geometric.data import Data
 from di.graph.base_graph import IGraphManager
 from di.environment.base_object import IWirelessDevice
 
@@ -11,23 +13,25 @@ class NetworkXManager(IGraphManager):
         self.threshold = threshold
         self.devices: Dict[int, IWirelessDevice] = {}
         self.graph = nx.Graph()
+        self.temporal_snapshots: List[Data] = []  # <-- Added for GNN stacking
 
     def add_device(self, device: IWirelessDevice):
         device_id = device.get_id()
         self.devices[device_id] = device
         self.graph.add_node(device_id)
 
-    def _compute_distance(self, pos1: np.ndarray, pos2: np.ndarray) -> float:
+    @staticmethod
+    def compute_distance(pos1: np.ndarray, pos2: np.ndarray) -> float:
         return np.linalg.norm(pos1 - pos2)
 
-    def _shannon_capacity(self, dist: float, bandwidth: float = 1.0, power: float = 1.0, noise: float = 1.0) -> float:
+    @staticmethod
+    def shannon_capacity(dist: float, bandwidth: float = 1.0, power: float = 1.0, noise: float = 1.0) -> float:
         if dist == 0:
-            return float('inf')  # Infinite capacity at zero distance
+            return float('inf')
         snr = power / (noise * dist ** 2)
         return bandwidth * np.log2(1 + snr)
 
     def build_graph(self):
-        # Initially build graph from scratch
         for dev_a in self.devices.values():
             for dev_b in self.devices.values():
                 if dev_a.get_id() == dev_b.get_id():
@@ -36,18 +40,15 @@ class NetworkXManager(IGraphManager):
                 id_b = dev_b.get_id()
                 pos_a = np.array(dev_a.get_position())
                 pos_b = np.array(dev_b.get_position())
-                dist = self._compute_distance(pos_a, pos_b)
+                dist = self.compute_distance(pos_a, pos_b)
                 if dist <= self.threshold:
-                    capacity = self._shannon_capacity(dist)
+                    capacity = self.shannon_capacity(dist)
                     self.graph.add_edge(id_a, id_b, weight=capacity)
-
-        self.visualize_graph()
 
     def update_edge_rates(self):
         current_edges = set(self.graph.edges)
         updated_edges = set()
 
-        # Check all possible device pairs
         for dev_a in self.devices.values():
             for dev_b in self.devices.values():
                 id_a = dev_a.get_id()
@@ -57,24 +58,22 @@ class NetworkXManager(IGraphManager):
 
                 pos_a = np.array(dev_a.get_position())
                 pos_b = np.array(dev_b.get_position())
-                dist = self._compute_distance(pos_a, pos_b)
+                dist = self.compute_distance(pos_a, pos_b)
 
                 if dist <= self.threshold:
-                    capacity = self._shannon_capacity(dist)
+                    capacity = self.shannon_capacity(dist)
                     self.graph.add_edge(id_a, id_b, weight=capacity)
                     updated_edges.add((min(id_a, id_b), max(id_a, id_b)))  # normalized order
                 else:
-                    # If edge exists and distance is too far, remove it
                     if self.graph.has_edge(id_a, id_b):
                         self.graph.remove_edge(id_a, id_b)
 
-        # Optional: Clean up any leftover edges (if needed)
-        # but the above loop already handles both add and remove
+        self.record_graph_snapshot()  # <-- record graph after update
 
     def get_node_features(self) -> List[List[float]]:
         return [self.devices[node_id].feature.tolist() for node_id in self.graph.nodes]
 
-    def get_edge_features(self) -> List[float]:
+    def get_edge_features(self) -> list[float]:  # <-- fixed the type hint to just a list of float
         return [self.graph[u][v]['weight'] for u, v in self.graph.edges]
 
     def successors(self, node_id: int) -> List[int]:
@@ -93,8 +92,8 @@ class NetworkXManager(IGraphManager):
     def add_edges(self, src: int, dst: int):
         pos_src = np.array(self.devices[src].get_position())
         pos_dst = np.array(self.devices[dst].get_position())
-        dist = self._compute_distance(pos_src, pos_dst)
-        capacity = self._shannon_capacity(dist)
+        dist = self.compute_distance(pos_src, pos_dst)
+        capacity = self.shannon_capacity(dist)
         self.graph.add_edge(src, dst, weight=capacity)
 
     def remove_edges(self, edge_id: int):
@@ -118,3 +117,31 @@ class NetworkXManager(IGraphManager):
         plt.title("Wireless Devices Graph (Shannon Capacity)")
         plt.axis("off")
         plt.show()
+
+    # --------------------- ADDED for GNN skeleton stacking ---------------------
+
+    def record_graph_snapshot(self):
+        node_ids = list(self.graph.nodes)
+        if not node_ids:
+            return
+
+        id_to_idx = {node_id: idx for idx, node_id in enumerate(node_ids)}
+        node_features = torch.tensor(self.get_node_features(), dtype=torch.float)
+
+        edge_index = [
+            [id_to_idx[src], id_to_idx[dst]]
+            for src, dst in self.graph.edges
+        ]
+        edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
+
+        edge_weights = torch.tensor(self.get_edge_features(), dtype=torch.float).view(-1, 1)
+
+        data = Data(x=node_features, edge_index=edge_index, edge_attr=edge_weights)
+        self.temporal_snapshots.append(data)
+
+    def get_temporal_data(self) -> List[Data]:
+        return self.temporal_snapshots
+
+    def reset_temporal_data(self):
+        self.temporal_snapshots = []
+

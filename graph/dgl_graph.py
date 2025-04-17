@@ -1,3 +1,5 @@
+from abc import ABC
+
 import torch
 import dgl
 import numpy as np
@@ -6,7 +8,7 @@ from typing import List, Dict
 from di.environment.base_object import IWirelessDevice
 
 
-class GraphManager(IGraphManager):
+class GraphManager(IGraphManager, ABC):
     threshold = 1
     def __init__(self, config, wds: List[IWirelessDevice], aps: List[int], servers: List[int]):
 

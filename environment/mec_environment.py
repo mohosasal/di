@@ -1,14 +1,13 @@
 from typing import List, Dict
 from collections import defaultdict
+from pwnlib.dynelf import sizeof
 from di.environment.base_object import IWirelessDevice
 from di.environment.task import Task, TaskStatus
-from di.environment.wireless_device import WirelessDevice
 from di.graph.base_graph import IGraphManager
-import random
 
 
 class MECEnvironment:
-    def __init__(self, config, graph_manager: IGraphManager,wireless_device: IWirelessDevice):
+    def __init__(self, config, graph_manager: IGraphManager, wireless_device: IWirelessDevice):
         self.config = config
         self.graph_manager = graph_manager
         self.tasks: List[Task] = []
@@ -18,7 +17,7 @@ class MECEnvironment:
 
     def step(self):
 
-        #todo make it works for 1 seceond too
+        # todo make it works for 1 second too
         min_time = self._find_min_remaining_time()
 
         self.move_vehicles(min_time)
@@ -26,20 +25,20 @@ class MECEnvironment:
         self.process_tasks(min_time)
 
         return min_time
-    
+
     def _find_min_remaining_time(self) -> float:
 
         if not self.tasks:
             return float('inf')
-        
+
         min_time = float('inf')
         for task in self.tasks:
             active_time = self._get_active_time_component(task)
             if 0 < active_time < min_time:
                 min_time = active_time
-        
+
         return min_time
-    
+
     def _get_active_time_component(self, task: Task) -> float:
 
         if task.status == TaskStatus.TRANSMITTING:
@@ -77,7 +76,6 @@ class MECEnvironment:
 
         task.remaining_times['transmission'] -= time_step
 
-        # Check if transmission is complete
         if task.remaining_times['transmission'] <= 0:
 
             next_node = self.get_next_hop(task)
@@ -85,40 +83,33 @@ class MECEnvironment:
             if next_node == task.destination:
                 task.status = TaskStatus.PROCESSING
                 task.current_location = task.destination
-                # caclulate remaining time
                 available_resources = self.get_available_resources(task.current_location)
-                # Update the remaining processing time
-                task.remaining_times['processing'] = task.compute_demand /  available_resources
+                task.remaining_times['processing'] = task.compute_demand / available_resources
 
             else:
                 if self.graph_manager.has_edges_between(task.current_location, next_node):
                     task.current_location = next_node
-                    # Set new transmission time
                     new_transmission_time = self.estimate_transmission_time(task, next_node)
-                    task.remaining_times['transmission']=new_transmission_time
+                    task.remaining_times['transmission'] = new_transmission_time
                 else:
                     task.status = TaskStatus.FORWARD_CORRUPTED
 
     def compute_task(self, task: Task, time_step: float = 1.0):
 
         available_resources = self.get_available_resources(task.current_location)
-        # Update the remaining processing time
         task.remaining_times['processing'] -= available_resources * time_step
         task.remaining_times['total'] -= available_resources * time_step
-        
-        # Check if processing is complete
+
         if task.remaining_times['processing'] <= 0:
             task.status = TaskStatus.COMPUTATION_COMPLETED
             self.generate_ack(task)
 
     def generate_ack(self, task: Task):
-        # Create ACK task with appropriate size and processing demand
         task.data_size = self.config.ack_size
         task.compute_demand = 0
         task.status = TaskStatus.ACK_TRANSMITTING
-        #todo set destination
-        
-        # Set ACK transmission time
+        task.destination = task.path_back[sizeof(task.path_back) - 1]
+
         ack_transmission_time = self.estimate_transmission_time(task, task.wd_id)
         task.remaining_times['transmission'] = ack_transmission_time
 
@@ -126,8 +117,11 @@ class MECEnvironment:
         return self.graph_manager.get_node_features()[node_id][0]
 
     def get_next_hop(self, task: Task) -> int:
-        #todo check if is ask or not!
-        path = task.path_for
+
+        if task.status != TaskStatus.ACK_TRANSMITTING:
+            path = task.path_for
+        else:
+            path = task.path_back
         if task.current_location in path:
             index = path.index(task.current_location)
             if index + 1 < len(path):
@@ -147,7 +141,6 @@ class MECEnvironment:
 
     def load_sample_tasks(self):
 
-
         wd_id = self.wireless_device.get_all()[0].id
 
         task = Task(
@@ -158,26 +151,26 @@ class MECEnvironment:
             deadline=20.0,  # 20 seconds
             current_location=wd_id
         )
-        
+
         # Set destination and path
         task.destination = self.wireless_device.get_all()[2].id
-        task.path_for = [wd_id, self.wireless_device.get_all()[1].id,self.wireless_device.get_all()[2].id]  # Simple direct path
-        task.path_back = [self.wireless_device.get_all()[2].id,self.wireless_device.get_all()[1].id, wd_id]  # Return path
-        
+        task.path_for = [wd_id, self.wireless_device.get_all()[1].id,
+                         self.wireless_device.get_all()[2].id]  # Simple direct path
+        task.path_back = [self.wireless_device.get_all()[2].id, self.wireless_device.get_all()[1].id,
+                          wd_id]  # Return path
+
         task.status = TaskStatus.TRANSMITTING
         task.remaining_times['transmission'] = 10
 
         self.tasks.append(task)
         return self.tasks
 
-
-
-
         ###### important non-implemented issues :
 
-        # transmiting to ap
-        #server
+        # transmitting to ap
+        # server
         # ...
         # fp
         # retry mechanism if the path corrupted !
         # always check where to stop step
+        # temporal GNN
