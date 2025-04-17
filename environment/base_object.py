@@ -27,3 +27,7 @@ class IWirelessDevice(Protocol):
 
     def get_id(self) -> str:
         pass
+
+    @staticmethod
+    def get_all() -> List["IWirelessDevice"]:
+        pass

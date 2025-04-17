@@ -8,12 +8,13 @@ import random
 
 
 class MECEnvironment:
-    def __init__(self, config, graph_manager: IGraphManager):
+    def __init__(self, config, graph_manager: IGraphManager,wireless_device: IWirelessDevice):
         self.config = config
         self.graph_manager = graph_manager
         self.tasks: List[Task] = []
         self.queues: Dict[int, List[Task]] = defaultdict(list)
         self.graph_manager.update_edge_rates()
+        self.wireless_device = wireless_device
 
     def step(self):
 
@@ -51,7 +52,7 @@ class MECEnvironment:
             return float('inf')
 
     def move_vehicles(self, time):
-        WirelessDevice.move_all(time)
+        self.wireless_device.move_all(time)
 
     def update_topology(self):
         self.graph_manager.update_edge_rates()
@@ -94,7 +95,7 @@ class MECEnvironment:
                     task.current_location = next_node
                     # Set new transmission time
                     new_transmission_time = self.estimate_transmission_time(task, next_node)
-                    task.remaining_times['transmitting']=new_transmission_time
+                    task.remaining_times['transmission']=new_transmission_time
                 else:
                     task.status = TaskStatus.FORWARD_CORRUPTED
 
@@ -119,7 +120,7 @@ class MECEnvironment:
         
         # Set ACK transmission time
         ack_transmission_time = self.estimate_transmission_time(task, task.wd_id)
-        task.remaining_times['transmitting'] = ack_transmission_time
+        task.remaining_times['transmission'] = ack_transmission_time
 
     def get_available_resources(self, node_id: int) -> float:
         return self.graph_manager.get_node_features()[node_id][0]
@@ -145,23 +146,10 @@ class MECEnvironment:
         self.graph_manager.update_edge_rates(self.wireless_device)
 
     def load_sample_tasks(self):
-        """
-        Load a single sample task into the environment with predefined parameters.
-        """
-        # Clear existing tasks
-        self.tasks.clear()
-        
-        # Get first available wireless device and server
-        wd_ids = list(self.wireless_device.vehicles.keys())
-        server_ids = list(self.graph_manager.servers.keys())
-        
-        if not wd_ids or not server_ids:
-            raise ValueError("No wireless devices or servers available")
-            
-        wd_id = wd_ids[0]
-        server_id = server_ids[0]
-        
-        # Create a single task with predefined parameters
+
+
+        wd_id = self.wireless_device.get_all()[0].id
+
         task = Task(
             task_id=0,
             wd_id=wd_id,
@@ -172,17 +160,14 @@ class MECEnvironment:
         )
         
         # Set destination and path
-        task.destination = server_id
-        task.path_for = [wd_id, server_id]  # Simple direct path
-        task.path_back = [server_id, wd_id]  # Return path
+        task.destination = self.wireless_device.get_all()[2].id
+        task.path_for = [wd_id, self.wireless_device.get_all()[1].id,self.wireless_device.get_all()[2].id]  # Simple direct path
+        task.path_back = [self.wireless_device.get_all()[2].id,self.wireless_device.get_all()[1].id, wd_id]  # Return path
         
-        # Set task status and initial transmission time
         task.status = TaskStatus.TRANSMITTING
-        task.remaining_times['transmission'] = 10  # 10 seconds for transmission
-        
-        # Add task to environment
+        task.remaining_times['transmission'] = 10
+
         self.tasks.append(task)
-        
         return self.tasks
 
 

@@ -10,19 +10,18 @@ from configs.config import Config
 def main():
     # Initialize components
     config = Config()
-    
+
     # Create graph manager
-    graph_manager = NetworkXManager(threshold=10)
-    
-    # Create wireless device manager
     WirelessDevice.load_data()
-    WirelessDevice.move_all(0)
-    
+    WirelessDevice.move_all(1)
+    graph_manager = NetworkXManager(threshold=1500)
+    [graph_manager.add_device(i) for i in WirelessDevice.vehicles]
 
-
+    # Create wireless device manager
     #
     # # Create environment
-    env = MECEnvironment(config, graph_manager)
+    env = MECEnvironment(config, graph_manager,WirelessDevice)
+    env.load_sample_tasks()
     env.step()
     env.step()
     #
