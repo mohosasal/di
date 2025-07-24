@@ -17,7 +17,7 @@ class WirelessDevice(IWirelessDevice):
         self.s = s
         self.a = a
         self.cc = cc
-        self.feature.append(x,y,s,a,cc)
+        self.feature=[x,y,s,a,cc]
 
     @staticmethod
     def load_data(file_path="./TAVF-Hamburg/simulation_results.txt"):
@@ -76,3 +76,7 @@ class WirelessDevice(IWirelessDevice):
     @staticmethod
     def get_all() -> List["IWirelessDevice"]:
         return WirelessDevice.vehicles
+
+
+    # todo implement sumo run in the code
+    # todo create a folder for each scenario

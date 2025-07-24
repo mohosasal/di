@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Set
 from collections import defaultdict
 from pwnlib.dynelf import sizeof
 from di.environment.base_object import IWirelessDevice
@@ -17,7 +17,6 @@ class MECEnvironment:
 
     def step(self):
 
-        # todo make it works for 1 second too
         min_time = self._find_min_remaining_time()
 
         self.move_vehicles(min_time)
@@ -73,18 +72,35 @@ class MECEnvironment:
                 pass
 
     def forward_task(self, task: Task, time_step: float = 1.0):
-
         task.remaining_times['transmission'] -= time_step
 
         if task.remaining_times['transmission'] <= 0:
-
             next_node = self.get_next_hop(task)
 
             if next_node == task.destination:
-                task.status = TaskStatus.PROCESSING
-                task.current_location = task.destination
-                available_resources = self.get_available_resources(task.current_location)
-                task.remaining_times['processing'] = task.compute_demand / available_resources
+                # --- Arrival at destination ---
+                if task.status == TaskStatus.ACK_TRANSMITTING:
+                    # ACK arrived at original sender
+                    task.current_location = task.destination
+                    task.status = TaskStatus.ACK_RECEIVED
+
+                    # === DAG Dependency Logic: Release children tasks if eligible ===
+                    for child in getattr(task, 'dependents', []):
+                        # Eligible if ALL parents are finished (ACK_RECEIVED or FULL_COMPLETED)
+                        if all(parent.status in TaskStatus.ACK_RECEIVED for parent in
+                               getattr(child, 'dependencies', [])):
+                            if child.status == TaskStatus.PENDING:
+                                child.status = TaskStatus.TRANSMITTING
+                                child.remaining_times['transmission'] = self.estimate_transmission_time(child,
+                                                                                                        self.get_next_hop(
+                                                                                                            child))
+                    # =================================================================
+
+                else:
+                    task.status = TaskStatus.PROCESSING
+                    task.current_location = task.destination
+                    available_resources = self.get_available_resources(task.current_location)
+                    task.remaining_times['processing'] = task.compute_demand / available_resources
 
             else:
                 if self.graph_manager.has_edges_between(task.current_location, next_node):
@@ -95,6 +111,8 @@ class MECEnvironment:
                     task.status = TaskStatus.FORWARD_CORRUPTED
 
     def compute_task(self, task: Task, time_step: float = 1.0):
+
+        # todo should compute dag task
 
         available_resources = self.get_available_resources(task.current_location)
         task.remaining_times['processing'] -= available_resources * time_step
@@ -129,9 +147,22 @@ class MECEnvironment:
         return task.destination
 
     def estimate_transmission_time(self, task: Task, next_node: int) -> float:
+
         edge_id = self.graph_manager.edge_ids(task.current_location, next_node)
-        edge_capacity = self.graph_manager.get_edge_features()[edge_id]
-        return task.data_size / edge_capacity if edge_capacity > 0 else float('inf')
+
+        if  edge_id== -1 :
+            return float("inf")
+
+        features = self.graph_manager.get_edge_features()
+        # pick the best (max) capacity among them
+        max_capacity = max(features[eid] for eid in [edge_id])
+
+        # 4) if capacity is non‐positive, also treat as unreachable
+        if max_capacity <= 0:
+            return float("inf")
+
+        # 5) normal case: data_size / capacity
+        return task.data_size / max_capacity
 
     def reset(self):
         self.tasks.clear()
@@ -174,3 +205,10 @@ class MECEnvironment:
         # retry mechanism if the path corrupted !
         # always check where to stop step
         # temporal GNN
+        # Graph Sage
+
+
+    # todo analyze the parameters of the simulation in timestamps
+
+    # todo add quality of service outputs
+    # -- child and parent tasks release and offload and ... timestamps

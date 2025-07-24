@@ -71,7 +71,7 @@ class NetworkXManager(IGraphManager):
         self.record_graph_snapshot()  # <-- record graph after update
 
     def get_node_features(self) -> List[List[float]]:
-        return [self.devices[node_id].feature.tolist() for node_id in self.graph.nodes]
+        return [self.devices[node_id].feature for node_id in self.graph.nodes]
 
     def get_edge_features(self) -> list[float]:  # <-- fixed the type hint to just a list of float
         return [self.graph[u][v]['weight'] for u, v in self.graph.edges]

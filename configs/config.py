@@ -20,3 +20,6 @@ class Config:
         self.ack_size = 0.1  # Size of acknowledgment packets (MB)
         self.node_feature_dim = 3  # Number of features per node
         self.wd_to_wd_threshold = 1
+        self.comm_range = 1000
+        self.task_csv_path = "./environment/tasks.csv"
+        self.max_hops = 4
